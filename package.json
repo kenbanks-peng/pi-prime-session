@@ -1,5 +1,5 @@
 {
-  "name": "@kenbanks-peng/pi-prime-session",
+  "name": "@npm-ken/pi-prime-session",
   "version": "0.1.0",
   "description": "User-managed durable memory for priming Pi agent sessions",
   "type": "module",

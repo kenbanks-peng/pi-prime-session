@@ -1,0 +1,24 @@
+{
+  "name": "@kenbanks-peng/pi-prime-session",
+  "version": "0.1.0",
+  "description": "User-managed durable memory for priming Pi agent sessions",
+  "type": "module",
+  "keywords": ["pi-package", "pi-extension"],
+  "files": ["src"],
+  "pi": {
+    "extensions": ["./src/index.ts"]
+  },
+  "scripts": {
+    "test": "bun test",
+    "test:repository": "bun test test/prime-repository.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.84.1"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.84.1",
+    "@types/bun": "latest",
+    "typescript": "^5.9.3"
+  }
+}

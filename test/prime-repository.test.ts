@@ -178,7 +178,7 @@ describe("PrimeRepository", () => {
     const primes = createPrimeRepository("/workspace/product", "/home/user");
 
     expect(primes.directories).toEqual({
-      globalDirectory: "/home/user/.agents/prime",
+      globalDirectory: "/home/user/.agents/share/prime",
       projectDirectory: "/workspace/product/.agents/prime",
     });
   });

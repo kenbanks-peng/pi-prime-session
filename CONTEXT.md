@@ -13,7 +13,7 @@ A user-facing slash-command operation that creates, reads, updates, or deletes a
 _Avoid_: agent tool, memory tool
 
 **Global Prime**:
-A Prime stored under `~/.agents/prime`, available to every Pi project.
+A Prime stored under `~/.agents/share/prime`, available to every Pi project.
 
 **Project Prime**:
 A Prime stored under `.agents/prime` at the current project root, available only in that project.

@@ -21,4 +21,4 @@ Running `/prime` displays its command interface, with one operation per line.
 
 The extension assigns each added Prime a short unique ID such as `prime-5fdd69c9` for its Markdown filename. The ID is shown after addition and identifies the Prime in list output; users never need to define one.
 
-Global Primes live in `~/.agents/prime`; Project Primes live in `.agents/prime` under the current project. Directories are created only when a user adds a Prime.
+Global Primes live in `~/.agents/share/prime`; Project Primes live in `.agents/prime` under the current project. Directories are created only when a user adds a Prime.

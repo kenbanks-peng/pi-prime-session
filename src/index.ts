@@ -6,7 +6,7 @@ import { PrimeRepository } from "./prime-repository.js";
 
 export function createPrimeRepository(cwd: string, home = homedir()): PrimeRepository {
   return new PrimeRepository({
-    globalDirectory: join(home, ".agents", "prime"),
+    globalDirectory: join(home, ".agents", "share", "prime"),
     projectDirectory: join(cwd, ".agents", "prime"),
   });
 }

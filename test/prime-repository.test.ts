@@ -54,7 +54,7 @@ describe("PrimeRepository", () => {
     ]);
 
     await expect(primes.compose()).resolves.toBe(
-      "<prime_memories>\n- Global alpha\n- Global zebra\n- Project beta\n</prime_memories>",
+      "<prime_memories>\n<memory>Global alpha</memory>\n<memory>Global zebra</memory>\n<memory>Project beta</memory>\n</prime_memories>",
     );
   });
 

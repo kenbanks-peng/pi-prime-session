@@ -79,7 +79,7 @@ export class PrimeRepository {
       this.readAll("global"),
       this.readAll("project"),
     ]);
-    const memories = [...global, ...project].map(({ content }) => `- ${content.replace(/\n/g, "\n  ")}`);
+    const memories = [...global, ...project].map(({ content }) => `<memory>${content}</memory>`);
 
     return memories.length === 0 ? "" : `<prime_memories>\n${memories.join("\n")}\n</prime_memories>`;
   }

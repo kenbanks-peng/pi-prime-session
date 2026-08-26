@@ -27,7 +27,7 @@ At the start of each agent run, Pi receives the combined Prime content as a hidd
 
 ```xml
 <prime_memories>
-- Global guidance
-- Project guidance
+<memory>Global guidance</memory>
+<memory>Project guidance</memory>
 </prime_memories>
 ```

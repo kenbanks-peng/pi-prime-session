@@ -41,7 +41,7 @@ describe("PrimeRepository", () => {
     await expect(primes.read("project", secondId)).resolves.toBe("Replacement guidance.");
   });
 
-  it("composes Prime memories without IDs, ordered Global before Project", async () => {
+  it("composes Prime memories as XML without IDs, ordered Global before Project", async () => {
     const primes = await createFixture();
     await Promise.all([
       mkdir(primes.directories.globalDirectory, { recursive: true }),
@@ -54,7 +54,7 @@ describe("PrimeRepository", () => {
     ]);
 
     await expect(primes.compose()).resolves.toBe(
-      "## Prime memories\n\n- Global alpha\n- Global zebra\n- Project beta",
+      "<prime_memories>\n- Global alpha\n- Global zebra\n- Project beta\n</prime_memories>",
     );
   });
 

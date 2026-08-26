@@ -17,7 +17,11 @@ export default function primeExtension(pi: ExtensionAPI): void {
     if (!primes) return;
 
     return {
-      systemPrompt: `${event.systemPrompt}\n\n## Primes\n\n${primes}`,
+      message: {
+        customType: "prime_memories",
+        content: primes,
+        display: false,
+      },
     };
   });
 

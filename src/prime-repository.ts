@@ -81,7 +81,7 @@ export class PrimeRepository {
     ]);
     const memories = [...global, ...project].map(({ content }) => `- ${content.replace(/\n/g, "\n  ")}`);
 
-    return memories.length === 0 ? "" : `## Prime memories\n\n${memories.join("\n")}`;
+    return memories.length === 0 ? "" : `<prime_memories>\n${memories.join("\n")}\n</prime_memories>`;
   }
 
   private async readAll(scope: PrimeScope): Promise<Array<{ scope: PrimeScope; id: string; content: string }>> {

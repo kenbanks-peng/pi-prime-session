@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createPrimeRepository } from "../src/index.js";
+import primeExtension, { createPrimeRepository } from "../src/index.js";
 import { runPrimeCommand } from "../src/prime-command.js";
 import { PrimeRepository } from "../src/prime-repository.js";
 
@@ -20,6 +20,38 @@ async function createFixture() {
     projectDirectory: join(root, "project", ".agents", "prime"),
   });
 }
+
+describe("Prime extension", () => {
+  it("places Prime messages before the conversation context", async () => {
+    let contextHandler: ((event: { messages: Array<Record<string, unknown>> }) => unknown) | undefined;
+    const pi = {
+      on(event: string, handler: (event: { messages: Array<Record<string, unknown>> }) => unknown) {
+        if (event === "context") contextHandler = handler;
+      },
+      registerCommand() {},
+    };
+
+    primeExtension(pi as never);
+
+    const result = await contextHandler!({
+      messages: [
+        { role: "user", content: "First request" },
+        { role: "custom", customType: "prime_memories", content: "<prime_memories />" },
+        { role: "assistant", content: "First response" },
+        { role: "custom", customType: "other_extension", content: "Other context" },
+        { role: "user", content: "Second request" },
+      ],
+    }) as { messages: Array<Record<string, unknown>> };
+
+    expect(result.messages.map((message) => message.content)).toEqual([
+      "<prime_memories />",
+      "First request",
+      "First response",
+      "Other context",
+      "Second request",
+    ]);
+  });
+});
 
 describe("PrimeRepository", () => {
   it("creates a Global Prime as Markdown and reads it back", async () => {

@@ -25,6 +25,22 @@ export default function primeExtension(pi: ExtensionAPI): void {
     };
   });
 
+  pi.on("context", (event) => {
+    const primeMessages = event.messages.filter(
+      (message) => message.role === "custom" && message.customType === "prime_memories",
+    );
+    if (primeMessages.length === 0) return;
+
+    return {
+      messages: [
+        ...primeMessages,
+        ...event.messages.filter(
+          (message) => message.role !== "custom" || message.customType !== "prime_memories",
+        ),
+      ],
+    };
+  });
+
   pi.registerCommand("prime", {
     description: "Add, list, edit, and delete Global and Project Primes",
     handler: async (args, ctx) => {

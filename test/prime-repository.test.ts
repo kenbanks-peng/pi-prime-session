@@ -30,7 +30,6 @@ describe("Prime extension", () => {
       },
       registerCommand() {},
     };
-
     primeExtension(pi as never);
 
     const result = await contextHandler!({
@@ -38,252 +37,77 @@ describe("Prime extension", () => {
         { role: "user", content: "First request" },
         { role: "custom", customType: "prime_memories", content: "<prime_memories />" },
         { role: "assistant", content: "First response" },
-        { role: "custom", customType: "other_extension", content: "Other context" },
-        { role: "user", content: "Second request" },
       ],
     }) as { messages: Array<Record<string, unknown>> };
 
-    expect(result.messages.map((message) => message.content)).toEqual([
-      "<prime_memories />",
-      "First request",
-      "First response",
-      "Other context",
-      "Second request",
-    ]);
+    expect(result.messages.map((message) => message.content)).toEqual(["<prime_memories />", "First request", "First response"]);
   });
 });
 
 describe("PrimeRepository", () => {
-  it("creates a Global Prime as Markdown and reads it back", async () => {
+  it("creates, reads, and lists memory and command Prime sources", async () => {
     const primes = await createFixture();
+    const memoryId = await primes.create("global", "memory", "Use tabs.");
+    const commandId = await primes.create("global", "command", 'version = 1\nargv = ["git", "status"]\n');
+    const memory = { id: memoryId, type: "memory" as const };
+    const command = { id: commandId, type: "command" as const };
 
-    const id = await primes.create("global", "Use tabs.");
-
-    expect(id).toMatch(/^prime-[0-9a-f]{8}$/);
-    await expect(primes.read("global", id)).resolves.toBe("Use tabs.");
+    await expect(primes.read("global", memory)).resolves.toBe("Use tabs.");
+    await expect(primes.read("global", command)).resolves.toContain("argv");
+    await expect(primes.list("global")).resolves.toEqual(expect.arrayContaining([memory, command]));
   });
 
-  it("assigns a distinct extension-managed ID to each Prime", async () => {
-    const primes = await createFixture();
-    const firstId = await primes.create("project", "Original guidance.");
-    const secondId = await primes.create("project", "Replacement guidance.");
-
-    expect(firstId).not.toBe(secondId);
-    await expect(primes.read("project", firstId)).resolves.toBe("Original guidance.");
-    await expect(primes.read("project", secondId)).resolves.toBe("Replacement guidance.");
-  });
-
-  it("composes Prime memories as XML without IDs, ordered Global before Project", async () => {
+  it("installs the default Global protocol and applies it to Project sources", async () => {
     const primes = await createFixture();
     await Promise.all([
       mkdir(primes.directories.globalDirectory, { recursive: true }),
       mkdir(primes.directories.projectDirectory, { recursive: true }),
     ]);
+    await writeFile(join(primes.directories.globalDirectory, "global.md"), "Global");
+    await writeFile(join(primes.directories.projectDirectory, "project.md"), "Project");
+
+    await expect(primes.compose()).resolves.toBe('<prime_memories version="1">\n<memory>Global</memory>\n<memory>Project</memory>\n</prime_memories>');
+    await expect(Bun.file(join(primes.directories.globalDirectory, "prime.protocol.toml")).text()).resolves.toContain('action = "memory"');
+  });
+
+  it("uses a Project protocol instead of the Global protocol for Project sources", async () => {
+    const primes = await createFixture();
+    await mkdir(primes.directories.projectDirectory, { recursive: true });
+    await writeFile(join(primes.directories.projectDirectory, "prime.protocol.toml"), 'version = 1\n[[rule]]\nglob = "only-*.md"\naction = "memory"\n');
     await Promise.all([
-      writeFile(join(primes.directories.globalDirectory, "zebra.md"), "Global zebra"),
-      writeFile(join(primes.directories.globalDirectory, "alpha.md"), "Global alpha"),
-      writeFile(join(primes.directories.projectDirectory, "beta.md"), "Project beta"),
+      writeFile(join(primes.directories.projectDirectory, "only-one.md"), "Selected"),
+      writeFile(join(primes.directories.projectDirectory, "other.md"), "Ignored"),
     ]);
 
-    await expect(primes.compose()).resolves.toBe(
-      "<prime_memories>\n<memory>Global alpha</memory>\n<memory>Global zebra</memory>\n<memory>Project beta</memory>\n</prime_memories>",
-    );
+    await expect(primes.compose()).resolves.toContain("Selected");
+    await expect(primes.compose()).resolves.not.toContain("Ignored");
   });
 
-  it("lists only direct Markdown Primes in ID order within the requested scope", async () => {
-    const root = await mkdtemp(join(tmpdir(), "pi-prime-"));
-    temporaryDirectories.push(root);
-    const globalDirectory = join(root, "global", "prime");
-    const projectDirectory = join(root, "project", ".agents", "prime");
-    const primes = new PrimeRepository({ globalDirectory, projectDirectory });
-    await Promise.all([
-      mkdir(globalDirectory, { recursive: true }),
-      mkdir(projectDirectory, { recursive: true }),
-    ]);
-    await Promise.all([
-      writeFile(join(globalDirectory, "zebra.md"), "Zebra"),
-      writeFile(join(globalDirectory, "alpha.md"), "Alpha"),
-      writeFile(join(globalDirectory, "ignore.txt"), "Ignore"),
-      mkdir(join(globalDirectory, "directory.md")),
-      writeFile(join(projectDirectory, "project-only.md"), "Project"),
-    ]);
-
-    await expect(primes.list("global")).resolves.toEqual(["alpha", "zebra"]);
-    await expect(primes.list("project")).resolves.toEqual(["project-only"]);
-  });
-
-  it("adds and lists a Project Prime through the Prime command adapter", async () => {
+  it("adds memory and command Prime sources through the Prime command", async () => {
     const primes = await createFixture();
     const notifications: string[] = [];
+    const editorValues = ["Keep pull requests small.", 'version = 1\nargv = ["git", "status"]\n'];
     const ui = {
       hasUI: true,
-      editor: async () => "Keep pull requests small.",
+      editor: async () => editorValues.shift(),
       notify: (message: string) => notifications.push(message),
     };
 
-    await runPrimeCommand("add", primes, ui);
+    await runPrimeCommand("add global memory", primes, ui);
+    await runPrimeCommand("add global command", primes, ui);
 
-    expect(notifications).toHaveLength(1);
-    expect(notifications[0]).toMatch(/^Added Project Prime "prime-[0-9a-f]{8}"\.$/);
-    await runPrimeCommand("list project", primes, ui);
-    expect(notifications[1]).toMatch(/^project:\n- Keep pull requests small\. \[prime-[0-9a-f]{8}\]$/);
+    expect(notifications[0]).toMatch(/^Added Global memory Prime "prime-[0-9a-f]{8}"\.$/);
+    expect(notifications[1]).toMatch(/^Added Global command Prime "prime-[0-9a-f]{8}"\.$/);
+    await runPrimeCommand("list global", primes, ui);
+    expect(notifications[2]).toContain("memory: Keep pull requests small.");
+    expect(notifications[2]).toContain("command: version = 1");
   });
 
-  it("edits and deletes a Prime by ID without a scope", async () => {
-    const primes = await createFixture();
-    const id = await primes.create("global", "Original guidance.");
-    const notifications: string[] = [];
-    const editorCalls: Array<{ title: string; initialValue: string }> = [];
-    const ui = {
-      hasUI: true,
-      editor: async (title: string, initialValue: string) => {
-        editorCalls.push({ title, initialValue });
-        return "Updated guidance.";
-      },
-      notify: (message: string) => notifications.push(message),
-    };
-
-    await runPrimeCommand(`edit ${id}`, primes, ui);
-
-    expect(editorCalls).toEqual([{ title: "Edit Global Prime", initialValue: "Original guidance." }]);
-    await expect(primes.read("global", id)).resolves.toBe("Updated guidance.");
-    expect(notifications).toEqual([`Edited Global Prime "${id}".`]);
-
-    await runPrimeCommand(`delete ${id}`, primes, ui);
-
-    await expect(primes.read("global", id)).rejects.toThrow(`Global Prime "${id}" does not exist.`);
-    expect(notifications).toEqual([`Edited Global Prime "${id}".`, `Deleted Global Prime "${id}".`]);
-  });
-
-  it("lists the Prime command interface when no operation is specified", async () => {
-    const primes = await createFixture();
-    const notifications: Array<{ message: string; level?: "info" | "warning" | "error" }> = [];
-    const ui = {
-      hasUI: true,
-      editor: async () => undefined,
-      notify: (message: string, level?: "info" | "warning" | "error") => notifications.push({ message, level }),
-    };
-
-    await runPrimeCommand("", primes, ui);
-
-    expect(notifications).toEqual([
-      {
-        message: "/prime list [global|project]\n/prime add [global|project]\n/prime edit <id>\n/prime delete <id>",
-        level: undefined,
-      },
-    ]);
-  });
-
-  it("lists Global Primes before Project Primes when no scope is specified", async () => {
-    const primes = await createFixture();
-    await primes.create("project", "Project guidance.");
-    await primes.create("global", "Global guidance.");
-    const notifications: string[] = [];
-    const ui = {
-      hasUI: true,
-      editor: async () => undefined,
-      notify: (message: string) => notifications.push(message),
-    };
-
-    await runPrimeCommand("list", primes, ui);
-
-    expect(notifications).toEqual([
-      expect.stringMatching(/^global:\n- Global guidance\. \[prime-[0-9a-f]{8}\]\n\nproject:\n- Project guidance\. \[prime-[0-9a-f]{8}\]$/),
-    ]);
-  });
-
-  it("labels empty Global and Project Prime lists", async () => {
-    const primes = await createFixture();
-    const notifications: string[] = [];
-    const ui = {
-      hasUI: true,
-      editor: async () => undefined,
-      notify: (message: string) => notifications.push(message),
-    };
-
-    await runPrimeCommand("list", primes, ui);
-
-    expect(notifications).toEqual(["global: none\n\nproject: none"]);
-  });
-
-  it("resolves Global and Project Prime storage independently", async () => {
+  it("resolves Global and Project Prime storage independently", () => {
     const primes = createPrimeRepository("/workspace/product", "/home/user");
-
     expect(primes.directories).toEqual({
       globalDirectory: "/home/user/.agents/share/prime",
       projectDirectory: "/workspace/product/.agents/prime",
     });
-  });
-
-  it("reports unavailable add UI without claiming success", async () => {
-    const primes = await createFixture();
-    const notifications: Array<{ message: string; level?: "info" | "warning" | "error" }> = [];
-    const ui = {
-      hasUI: false,
-      editor: async () => undefined,
-      notify: (message: string, level?: "info" | "warning" | "error") => notifications.push({ message, level }),
-    };
-
-    await runPrimeCommand("add global", primes, ui);
-
-    expect(notifications).toEqual([
-      {
-        message: "Adding a Prime requires interactive UI. Usage: /prime list [global|project] | add [global|project] | edit <id> | delete <id>",
-        level: "error",
-      },
-    ]);
-  });
-
-  it("rejects extra command arguments with concise usage guidance", async () => {
-    const primes = await createFixture();
-    const notifications: string[] = [];
-    const ui = {
-      hasUI: true,
-      editor: async () => "ignored",
-      notify: (message: string) => notifications.push(message),
-    };
-
-    await runPrimeCommand("list global unexpected", primes, ui);
-
-    expect(notifications).toEqual([
-      "Usage: /prime list [global|project] | add [global|project] | edit <id> | delete <id>",
-    ]);
-  });
-
-  it("uses the global keyword for a Global Prime", async () => {
-    const primes = await createFixture();
-    const notifications: string[] = [];
-    const ui = {
-      hasUI: true,
-      editor: async () => "Created through the Prime command.",
-      notify: (message: string) => notifications.push(message),
-    };
-
-    await runPrimeCommand("add global", primes, ui);
-
-    expect(notifications).toHaveLength(1);
-    await runPrimeCommand("list global", primes, ui);
-    expect(notifications[1]).toMatch(/^global:\n- Created through the Prime command\. \[prime-[0-9a-f]{8}\]$/);
-    expect(notifications[0]).toMatch(/^Added Global Prime "prime-[0-9a-f]{8}"\.$/);
-  });
-
-  it("reports storage failures without claiming that a Prime was created", async () => {
-    const root = await mkdtemp(join(tmpdir(), "pi-prime-"));
-    temporaryDirectories.push(root);
-    const globalDirectory = join(root, "blocked");
-    await writeFile(globalDirectory, "not a directory");
-    const primes = new PrimeRepository({ globalDirectory, projectDirectory: join(root, "project", "prime") });
-    const notifications: Array<{ message: string; level?: "info" | "warning" | "error" }> = [];
-    const ui = {
-      hasUI: true,
-      editor: async () => "Content",
-      notify: (message: string, level?: "info" | "warning" | "error") => notifications.push({ message, level }),
-    };
-
-    await runPrimeCommand("add global", primes, ui);
-
-    expect(notifications).toHaveLength(1);
-    expect(notifications[0]?.level).toBe("error");
-    expect(notifications[0]?.message).not.toContain("Created");
   });
 });

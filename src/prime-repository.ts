@@ -1,25 +1,32 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { installDefaultProtocol, loadProtocol, resolveProtocolMemories } from "./prime-protocol.js";
 
 export type PrimeScope = "global" | "project";
+export type PrimeSourceType = "memory" | "command";
 
 export interface PrimeRepositoryDirectories {
   globalDirectory: string;
   projectDirectory: string;
 }
 
+export interface PrimeSource {
+  id: string;
+  type: PrimeSourceType;
+}
+
 export class PrimeRepository {
   constructor(readonly directories: PrimeRepositoryDirectories) {}
 
-  async create(scope: PrimeScope, content: string): Promise<string> {
+  async create(scope: PrimeScope, type: PrimeSourceType, content: string): Promise<string> {
     const directory = this.directoryFor(scope);
     await mkdir(directory, { recursive: true });
 
     for (;;) {
       const id = `prime-${randomUUID().slice(0, 8)}`;
       try {
-        await writeFile(this.pathFor(scope, id), content, { encoding: "utf8", flag: "wx" });
+        await writeFile(this.pathFor(scope, id, type), content, { encoding: "utf8", flag: "wx" });
         return id;
       } catch (error) {
         if (!isFileSystemError(error, "EEXIST")) {
@@ -29,43 +36,51 @@ export class PrimeRepository {
     }
   }
 
-  async read(scope: PrimeScope, id: string): Promise<string> {
-    this.validateId(id);
+  async read(scope: PrimeScope, source: PrimeSource): Promise<string> {
     try {
-      return await readFile(this.pathFor(scope, id), "utf8");
+      return await readFile(this.pathFor(scope, source.id, source.type), "utf8");
     } catch (error) {
       if (isFileSystemError(error, "ENOENT")) {
-        throw new Error(`${scopeLabel(scope)} Prime "${id}" does not exist.`);
+        throw new Error(`${scopeLabel(scope)} ${source.type} Prime "${source.id}" does not exist.`);
       }
       throw error;
     }
   }
 
-  async edit(scope: PrimeScope, id: string, content: string): Promise<void> {
-    await this.read(scope, id);
-    await writeFile(this.pathFor(scope, id), content, "utf8");
+  async edit(scope: PrimeScope, source: PrimeSource, content: string): Promise<void> {
+    await this.read(scope, source);
+    await writeFile(this.pathFor(scope, source.id, source.type), content, "utf8");
   }
 
-  async delete(scope: PrimeScope, id: string): Promise<void> {
-    this.validateId(id);
+  async delete(scope: PrimeScope, source: PrimeSource): Promise<void> {
     try {
-      await unlink(this.pathFor(scope, id));
+      await unlink(this.pathFor(scope, source.id, source.type));
     } catch (error) {
       if (isFileSystemError(error, "ENOENT")) {
-        throw new Error(`${scopeLabel(scope)} Prime "${id}" does not exist.`);
+        throw new Error(`${scopeLabel(scope)} ${source.type} Prime "${source.id}" does not exist.`);
       }
       throw error;
     }
   }
 
-  async list(scope: PrimeScope): Promise<string[]> {
+  async list(scope: PrimeScope): Promise<PrimeSource[]> {
     try {
       const entries = await readdir(this.directoryFor(scope), { withFileTypes: true });
       return entries
-        .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
-        .map((entry) => entry.name.slice(0, -3))
-        .filter((id) => /^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(id))
-        .sort();
+        .filter((entry) => entry.isFile())
+        .map((entry): PrimeSource | undefined => {
+          if (entry.name.endsWith(".command.toml")) {
+            const id = entry.name.slice(0, -".command.toml".length);
+            return /^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(id) ? { id, type: "command" } : undefined;
+          }
+          if (entry.name.endsWith(".md")) {
+            const id = entry.name.slice(0, -".md".length);
+            return /^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(id) ? { id, type: "memory" } : undefined;
+          }
+          return undefined;
+        })
+        .filter((source): source is PrimeSource => source !== undefined)
+        .sort((left, right) => left.id.localeCompare(right.id) || left.type.localeCompare(right.type));
     } catch (error) {
       if (isFileSystemError(error, "ENOENT")) {
         return [];
@@ -75,27 +90,29 @@ export class PrimeRepository {
   }
 
   async compose(): Promise<string> {
-    const [global, project] = await Promise.all([
-      this.readAll("global"),
-      this.readAll("project"),
-    ]);
-    const memories = [...global, ...project].map(({ content }) => `<memory>${content}</memory>`);
+    const globalDirectory = this.directoryFor("global");
+    await installDefaultProtocol(globalDirectory);
+    const globalProtocol = await loadProtocol(globalDirectory, "Global");
+    if (!globalProtocol) throw new Error("Global Prime protocol could not be installed.");
 
-    return memories.length === 0 ? "" : `<prime_memories>\n${memories.join("\n")}\n</prime_memories>`;
-  }
+    const projectDirectory = this.directoryFor("project");
+    const projectProtocol = await loadProtocol(projectDirectory, "Project");
+    const global = await resolveProtocolMemories(globalDirectory, "Global", globalProtocol);
+    const project = await resolveProtocolMemories(projectDirectory, "Project", projectProtocol ?? globalProtocol);
+    const memories = [...global, ...project];
 
-  private async readAll(scope: PrimeScope): Promise<Array<{ scope: PrimeScope; id: string; content: string }>> {
-    return Promise.all(
-      (await this.list(scope)).map(async (id) => ({ scope, id, content: await this.read(scope, id) })),
-    );
+    return memories.length === 0
+      ? ""
+      : `<prime_memories version="1">\n${memories.map((memory) => `<memory>${escapeXml(memory)}</memory>`).join("\n")}\n</prime_memories>`;
   }
 
   private directoryFor(scope: PrimeScope): string {
     return scope === "global" ? this.directories.globalDirectory : this.directories.projectDirectory;
   }
 
-  private pathFor(scope: PrimeScope, id: string): string {
-    return join(this.directoryFor(scope), `${id}.md`);
+  private pathFor(scope: PrimeScope, id: string, type: PrimeSourceType): string {
+    this.validateId(id);
+    return join(this.directoryFor(scope), `${id}${type === "memory" ? ".md" : ".command.toml"}`);
   }
 
   private validateId(id: string): void {
@@ -103,6 +120,10 @@ export class PrimeRepository {
       throw new Error(`Invalid Prime ID "${id}". Use letters, digits, hyphens, or underscores.`);
     }
   }
+}
+
+function escapeXml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&apos;");
 }
 
 function isFileSystemError(error: unknown, code: string): error is NodeJS.ErrnoException {

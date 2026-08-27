@@ -1,6 +1,6 @@
 # Pi Prime
 
-A Pi extension for user-managed durable **Primes**: Markdown guidance stored outside the agent's command surface.
+Pi Prime injects user-authored Prime sources into Pi agent context.
 
 ## Install
 
@@ -10,24 +10,93 @@ Install the package with Pi, then restart or reload Pi:
 pi install npm:@kenbanks-peng/pi-prime
 ```
 
+## Protocol
+
+On its first agent start, the extension creates this Global protocol file if it does not already exist:
+
+```text
+~/.agents/share/prime/prime.protocol.toml
+```
+
+The installed file is:
+
+```toml
+version = 1
+
+[[rule]]
+glob = "*.md"
+action = "memory"
+
+[[rule]]
+glob = "*.command.toml"
+action = "command"
+```
+
+This Global protocol applies to both scopes:
+
+| Scope | Source root |
+| --- | --- |
+| Global | `~/.agents/share/prime/` |
+| Project | `.agents/prime/` in the current project |
+
+To override the policy for one project, create `.agents/prime/prime.protocol.toml`. The Project protocol applies only to Project sources. The Global protocol continues to apply to Global sources.
+
+Pi reads only direct regular files in each source root. It ignores subdirectories, symbolic links, and files that do not match a rule. Rules run in declaration order. Matching files run in filename order. A file can match only one rule.
+
+## Memory sources
+
+The `memory` action reads the complete UTF-8 contents of matching files and injects each file as one memory.
+
+```text
+.agents/prime/review-guidance.md
+```
+
+The filename controls order. Pi does not inject the filename.
+
+## Command sources
+
+The `command` action reads matching `*.command.toml` files. Each file gives one direct executable invocation:
+
+```toml
+version = 1
+argv = ["git", "status", "--short"]
+cwd = "."
+```
+
+`argv[0]` is the executable. All other values are literal arguments. Pi does not use a shell.
+
+`cwd` is optional. It is relative to the source root and cannot escape it. When omitted, Pi uses the source root.
+
+On success, Pi injects UTF-8 standard output as one memory. Pi reports an error if a command fails, times out, produces invalid UTF-8, or exceeds the output limit. The fixed limits are 1,000 ms and 1,048,576 bytes of standard output.
+
 ## `/prime` command
 
-Running `/prime` displays its command interface, with one operation per line.
+Run `/prime` to show the command interface.
 
-- `/prime list [global|project]` displays Global Primes followed by Project Primes by default. Each Prime ends with its ID in brackets, for example `[prime-5fdd69c9]`. Add a scope to display only that scope. Empty scopes display as `global: none` or `project: none`.
-- `/prime add [global|project]` opens the Pi editor to author a Project Prime by default. Add `global` to add a Global Prime.
-- `/prime edit <id>` opens the matching Prime in the Pi editor. The ID determines its scope.
-- `/prime delete <id>` deletes the matching Prime. The ID determines its scope.
+- `/prime list [global|project] [memory|command]` lists Prime sources.
+- `/prime add [global|project] [memory|command]` creates a source. The defaults are `project memory`.
+- `/prime edit <id> [memory|command]` edits a source. Add its type if its ID is ambiguous.
+- `/prime delete <id> [memory|command]` deletes a source. Add its type if its ID is ambiguous.
 
-The extension assigns each added Prime a short unique ID such as `prime-5fdd69c9` for its Markdown filename. The ID is shown after addition and identifies the Prime in list output; users never need to define one.
+Examples:
 
-Global Primes live in `~/.agents/share/prime`; Project Primes live in `.agents/prime` under the current project. Directories are created only when a user adds a Prime.
+```text
+/prime add global memory
+/prime add global command
+/prime add project command
+```
 
-At the start of each agent run, Pi receives the combined Prime content as a hidden persistent message, outside the system prompt, in this form:
+The extension gives each added source an ID such as `prime-5fdd69c9`. Memory source files end in `.md`. Command source files end in `.command.toml`.
+
+## Context format
+
+Pi resolves Global sources before Project sources. It adds this hidden message before conversation context:
 
 ```xml
-<prime_memories>
+<prime_memories version="1">
 <memory>Global guidance</memory>
 <memory>Project guidance</memory>
 </prime_memories>
 ```
+
+Pi XML-escapes memory source text and command output. Source data cannot add XML markup.

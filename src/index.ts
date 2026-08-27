@@ -42,7 +42,7 @@ export default function primeExtension(pi: ExtensionAPI): void {
   });
 
   pi.registerCommand("prime", {
-    description: "Add, list, edit, and delete Global and Project Primes",
+    description: "Manage Prime Markdown files; injection requires a matching prime.protocol.toml rule",
     handler: async (args, ctx) => {
       await runPrimeCommand(args, createPrimeRepository(ctx.cwd), {
         hasUI: ctx.hasUI,

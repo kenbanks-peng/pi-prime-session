@@ -1,4 +1,4 @@
-import { PrimeRepository, scopeLabel, type PrimeScope } from "./prime-repository.js";
+import { PrimeRepository, scopeLabel, type PrimeScope, type PrimeSource, type PrimeSourceType } from "./prime-repository.js";
 
 export interface PrimeCommandUI {
   hasUI: boolean;
@@ -6,30 +6,27 @@ export interface PrimeCommandUI {
   notify(message: string, level?: "info" | "warning" | "error"): void;
 }
 
-const api = "/prime list [global|project]\n/prime add [global|project]\n/prime edit <id>\n/prime delete <id>";
-const usage = "Usage: /prime list [global|project] | add [global|project] | edit <id> | delete <id>";
+const api = "/prime list [global|project] [memory|command]\n/prime add [global|project] [memory|command]\n/prime edit <id> [memory|command]\n/prime delete <id> [memory|command]";
+const usage = "Usage: /prime list [global|project] [memory|command] | add [global|project] [memory|command] | edit <id> [memory|command] | delete <id> [memory|command]";
+const commandTemplate = "version = 1\nargv = [\"git\", \"status\", \"--short\"]\ncwd = \".\"\n";
 
 export async function runPrimeCommand(args: string, primes: PrimeRepository, ui: PrimeCommandUI): Promise<void> {
   const tokens = args.trim().split(/\s+/).filter(Boolean);
-  const [operation, argument] = tokens;
+  const [operation, ...arguments_] = tokens;
 
   try {
     switch (operation) {
       case "list":
-        if (tokens.length > 2) throw new Error(usage);
-        await listPrimes(argument, primes, ui);
+        await listPrimes(arguments_, primes, ui);
         return;
       case "add":
-        if (tokens.length > 2) throw new Error(usage);
-        await addPrime(scopeFromArgument(argument), primes, ui);
+        await addPrime(arguments_, primes, ui);
         return;
       case "edit":
-        if (tokens.length !== 2) throw new Error(usage);
-        await editPrime(argument, primes, ui);
+        await editPrime(arguments_, primes, ui);
         return;
       case "delete":
-        if (tokens.length !== 2) throw new Error(usage);
-        await deletePrime(argument, primes, ui);
+        await deletePrime(arguments_, primes, ui);
         return;
       case undefined:
         ui.notify(api);
@@ -42,82 +39,95 @@ export async function runPrimeCommand(args: string, primes: PrimeRepository, ui:
   }
 }
 
-async function listPrimes(scopeArgument: string | undefined, primes: PrimeRepository, ui: PrimeCommandUI): Promise<void> {
-  const scopes: PrimeScope[] = scopeArgument === undefined
-    ? ["global", "project"]
-    : [scopeFromArgument(scopeArgument)];
-  const lists = await Promise.all(scopes.map(async (scope) => {
-    const ids = await primes.list(scope);
-    const contents = await Promise.all(ids.map(async (id) => ({ id, content: await primes.read(scope, id) })));
-    return formatPrimeList(scope, contents);
+async function listPrimes(arguments_: string[], primes: PrimeRepository, ui: PrimeCommandUI): Promise<void> {
+  const { scope, type } = parseScopeAndType(arguments_, true);
+  const scopes: PrimeScope[] = scope === undefined ? ["global", "project"] : [scope];
+  const lists = await Promise.all(scopes.map(async (currentScope) => {
+    const sources = (await primes.list(currentScope)).filter((source) => type === undefined || source.type === type);
+    const contents = await Promise.all(sources.map(async (source) => ({ source, content: await primes.read(currentScope, source) })));
+    return formatPrimeList(currentScope, contents);
   }));
   ui.notify(lists.join("\n\n"));
 }
 
-async function addPrime(scope: PrimeScope, primes: PrimeRepository, ui: PrimeCommandUI): Promise<void> {
+async function addPrime(arguments_: string[], primes: PrimeRepository, ui: PrimeCommandUI): Promise<void> {
   requireInteractiveUI(ui, "Adding");
-
-  const content = await ui.editor(`Add ${scopeLabel(scope)} Prime`, "");
+  const { scope = "project", type = "memory" } = parseScopeAndType(arguments_, true);
+  const content = await ui.editor(`Add ${scopeLabel(scope)} ${type} Prime`, type === "command" ? commandTemplate : "");
   if (content === undefined) {
-    ui.notify(`${scopeLabel(scope)} Prime addition cancelled.`);
+    ui.notify(`${scopeLabel(scope)} ${type} Prime addition cancelled.`);
     return;
   }
 
-  const id = await primes.create(scope, content);
-  ui.notify(`Added ${scopeLabel(scope)} Prime "${id}".`);
+  const id = await primes.create(scope, type, content);
+  ui.notify(`Added ${scopeLabel(scope)} ${type} Prime "${id}".`);
 }
 
-async function editPrime(id: string | undefined, primes: PrimeRepository, ui: PrimeCommandUI): Promise<void> {
+async function editPrime(arguments_: string[], primes: PrimeRepository, ui: PrimeCommandUI): Promise<void> {
   requireInteractiveUI(ui, "Editing");
-  const scope = await scopeForId(id!, primes);
-  const content = await primes.read(scope, id!);
-  const updatedContent = await ui.editor(`Edit ${scopeLabel(scope)} Prime`, content);
+  const [id, typeArgument] = arguments_;
+  if (id === undefined || arguments_.length > 2) throw new Error(usage);
+  const source = await sourceForId(id, typeArgument, primes);
+  const content = await primes.read(source.scope, source);
+  const updatedContent = await ui.editor(`Edit ${scopeLabel(source.scope)} ${source.type} Prime`, content);
   if (updatedContent === undefined) {
-    ui.notify(`${scopeLabel(scope)} Prime edit cancelled.`);
+    ui.notify(`${scopeLabel(source.scope)} ${source.type} Prime edit cancelled.`);
     return;
   }
 
-  await primes.edit(scope, id!, updatedContent);
-  ui.notify(`Edited ${scopeLabel(scope)} Prime "${id}".`);
+  await primes.edit(source.scope, source, updatedContent);
+  ui.notify(`Edited ${scopeLabel(source.scope)} ${source.type} Prime "${id}".`);
 }
 
-async function deletePrime(id: string | undefined, primes: PrimeRepository, ui: PrimeCommandUI): Promise<void> {
-  const scope = await scopeForId(id!, primes);
-  await primes.delete(scope, id!);
-  ui.notify(`Deleted ${scopeLabel(scope)} Prime "${id}".`);
+async function deletePrime(arguments_: string[], primes: PrimeRepository, ui: PrimeCommandUI): Promise<void> {
+  const [id, typeArgument] = arguments_;
+  if (id === undefined || arguments_.length > 2) throw new Error(usage);
+  const source = await sourceForId(id, typeArgument, primes);
+  await primes.delete(source.scope, source);
+  ui.notify(`Deleted ${scopeLabel(source.scope)} ${source.type} Prime "${id}".`);
+}
+
+function parseScopeAndType(arguments_: string[], allowEmpty: boolean): { scope?: PrimeScope; type?: PrimeSourceType } {
+  if ((!allowEmpty && arguments_.length === 0) || arguments_.length > 2) throw new Error(usage);
+  let scope: PrimeScope | undefined;
+  let type: PrimeSourceType | undefined;
+  for (const value of arguments_) {
+    if (value === "global" || value === "project") {
+      if (scope !== undefined) throw new Error(usage);
+      scope = value;
+    } else if (value === "memory" || value === "command") {
+      if (type !== undefined) throw new Error(usage);
+      type = value;
+    } else {
+      throw new Error(usage);
+    }
+  }
+  return { scope, type };
 }
 
 function requireInteractiveUI(ui: PrimeCommandUI, operation: string): void {
-  if (!ui.hasUI) {
-    throw new Error(`${operation} a Prime requires interactive UI. ${usage}`);
-  }
+  if (!ui.hasUI) throw new Error(`${operation} a Prime requires interactive UI. ${usage}`);
 }
 
-async function scopeForId(id: string, primes: PrimeRepository): Promise<PrimeScope> {
-  const scopes = (await Promise.all(
-    (["global", "project"] as const).map(async (scope) => (await primes.list(scope)).includes(id) ? scope : undefined),
-  )).filter((scope): scope is PrimeScope => scope !== undefined);
+async function sourceForId(id: string, typeArgument: string | undefined, primes: PrimeRepository): Promise<PrimeSource & { scope: PrimeScope }> {
+  if (typeArgument !== undefined && typeArgument !== "memory" && typeArgument !== "command") throw new Error(usage);
+  const requestedType = typeArgument as PrimeSourceType | undefined;
+  const sources = (await Promise.all(
+    (["global", "project"] as const).map(async (scope) => (await primes.list(scope))
+      .filter((source) => source.id === id && (requestedType === undefined || source.type === requestedType))
+      .map((source) => ({ ...source, scope }))),
+  )).flat();
 
-  if (scopes.length === 0) {
-    throw new Error(`Prime "${id}" does not exist.`);
-  }
-  if (scopes.length > 1) {
-    throw new Error(`Prime "${id}" exists in both scopes.`);
-  }
-  return scopes[0]!;
+  if (sources.length === 0) throw new Error(`Prime "${id}" does not exist.`);
+  if (sources.length > 1) throw new Error(`Prime "${id}" is ambiguous. Specify memory or command, or remove the duplicate.`);
+  return sources[0]!;
 }
 
-function scopeFromArgument(value: string | undefined): PrimeScope {
-  if (value === undefined) return "project";
-  if (value === "global" || value === "project") return value;
-  throw new Error(`Invalid Prime scope "${value}". Use global, project, or omit the scope to list both.`);
-}
-
-function formatPrimeList(scope: PrimeScope, primes: Array<{ id: string; content: string }>): string {
+function formatPrimeList(scope: PrimeScope, primes: Array<{ source: PrimeSource; content: string }>): string {
   const label = `${scope}:`;
   return primes.length === 0
     ? `${label} none`
-    : `${label}\n${primes.map(({ id, content }) => `- ${content} [${id}]`).join("\n")}`;
+    : `${label}\n${primes.map(({ source, content }) => `- ${source.type}: ${content} [${source.id}]`).join("\n")}`;
 }
 
 function errorMessage(error: unknown): string {

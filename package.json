@@ -1,7 +1,7 @@
 {
   "name": "@npm-ken/pi-prime-session",
-  "version": "1.2.0",
-  "description": "User-managed durable memory for priming Pi agent sessions",
+  "version": "2.0.0",
+  "description": "User-managed priming of Pi agent sessions with memories and commands",
   "type": "module",
   "keywords": ["pi-package", "pi-extension"],
   "files": ["src"],

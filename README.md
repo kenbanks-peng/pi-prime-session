@@ -74,7 +74,7 @@ On success, Pi injects UTF-8 standard output as one memory. Pi reports an error 
 Run `/prime` to show the command interface.
 
 - `/prime list [global|project] [memory|command]` lists Prime sources.
-- `/prime add [global|project] [memory|command]` creates a source. The defaults are `project memory`.
+- `/prime add [global|project] [memory|command]` creates a source. The defaults are `project memory`. When it adds a command source, it inserts `version = 1` automatically; the editor does not show this field.
 - `/prime edit <id> [memory|command]` edits a source. Add its type if its ID is ambiguous.
 - `/prime delete <id> [memory|command]` deletes a source. Add its type if its ID is ambiguous.
 

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import primeExtension, { createPrimeRepository } from "../src/index.js";
 import { runPrimeCommand } from "../src/prime-command.js";
+import { PRIME_VERSION } from "../src/prime-protocol.js";
 import { PrimeRepository } from "../src/prime-repository.js";
 
 const temporaryDirectories: string[] = [];
@@ -86,10 +87,14 @@ describe("PrimeRepository", () => {
   it("adds memory and command Prime sources through the Prime command", async () => {
     const primes = await createFixture();
     const notifications: string[] = [];
-    const editorValues = ["Keep pull requests small.", 'version = 1\nargv = ["git", "status"]\n'];
+    const editorValues = ["Keep pull requests small.", 'argv = ["git", "status"]\n'];
+    const editorInitialValues: string[] = [];
     const ui = {
       hasUI: true,
-      editor: async () => editorValues.shift(),
+      editor: async (_title: string, initialValue: string) => {
+        editorInitialValues.push(initialValue);
+        return editorValues.shift();
+      },
       notify: (message: string) => notifications.push(message),
     };
 
@@ -98,9 +103,10 @@ describe("PrimeRepository", () => {
 
     expect(notifications[0]).toMatch(/^Added Global memory Prime "prime-[0-9a-f]{8}"\.$/);
     expect(notifications[1]).toMatch(/^Added Global command Prime "prime-[0-9a-f]{8}"\.$/);
+    expect(editorInitialValues[1]).not.toContain("version");
     await runPrimeCommand("list global", primes, ui);
     expect(notifications[2]).toContain("memory: Keep pull requests small.");
-    expect(notifications[2]).toContain("command: version = 1");
+    expect(notifications[2]).toContain(`command: version = ${PRIME_VERSION}`);
   });
 
   it("resolves Global and Project Prime storage independently", () => {

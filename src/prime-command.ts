@@ -1,3 +1,4 @@
+import { PRIME_VERSION } from "./prime-protocol.js";
 import { PrimeRepository, scopeLabel, type PrimeScope, type PrimeSource, type PrimeSourceType } from "./prime-repository.js";
 
 export interface PrimeCommandUI {
@@ -8,7 +9,8 @@ export interface PrimeCommandUI {
 
 const api = "/prime list [global|project] [memory|command]\n/prime add [global|project] [memory|command]\n/prime edit <id> [memory|command]\n/prime delete <id> [memory|command]";
 const usage = "Usage: /prime list [global|project] [memory|command] | add [global|project] [memory|command] | edit <id> [memory|command] | delete <id> [memory|command]";
-const commandTemplate = "version = 1\nargv = [\"git\", \"status\", \"--short\"]\ncwd = \".\"\n";
+const commandTemplate = "argv = [\"git\", \"status\", \"--short\"]\ncwd = \".\"\n";
+const commandVersion = `version = ${PRIME_VERSION}\n`;
 
 export async function runPrimeCommand(args: string, primes: PrimeRepository, ui: PrimeCommandUI): Promise<void> {
   const tokens = args.trim().split(/\s+/).filter(Boolean);
@@ -59,7 +61,7 @@ async function addPrime(arguments_: string[], primes: PrimeRepository, ui: Prime
     return;
   }
 
-  const id = await primes.create(scope, type, content);
+  const id = await primes.create(scope, type, type === "command" ? `${commandVersion}${content}` : content);
   ui.notify(`Added ${scopeLabel(scope)} ${type} Prime "${id}".`);
 }
 

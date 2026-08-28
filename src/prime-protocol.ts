@@ -5,10 +5,11 @@ import { basename, isAbsolute, relative, resolve } from "node:path";
 
 export const COMMAND_TIMEOUT_MS = 1_000;
 export const COMMAND_OUTPUT_LIMIT_BYTES = 1_048_576;
+export const PRIME_VERSION = 1;
 
 export type PrimeAction = "memory" | "command";
 
-export const DEFAULT_PROTOCOL = `version = 1
+export const DEFAULT_PROTOCOL = `version = ${PRIME_VERSION}
 
 [[rule]]
 glob = "*.md"
@@ -25,12 +26,12 @@ interface PrimeRuleV1 {
 }
 
 export interface PrimeProtocolV1 {
-  version: 1;
+  version: typeof PRIME_VERSION;
   rule: PrimeRuleV1[];
 }
 
 interface CommandSourceV1 {
-  version: 1;
+  version: typeof PRIME_VERSION;
   argv: [string, ...string[]];
   cwd?: string;
 }
@@ -77,12 +78,12 @@ export async function resolveProtocolMemories(sourceRoot: string, scopeLabel: st
 
 function parseProtocol(text: string, scopeLabel: string): PrimeProtocolV1 {
   const value = parseToml(text, `${scopeLabel} protocol`);
-  if (!isRecord(value) || value.version !== 1 || !Array.isArray(value.rule) || value.rule.length === 0) {
-    throw new Error(`${scopeLabel} protocol must contain version = 1 and one or more [[rule]] entries.`);
+  if (!isRecord(value) || value.version !== PRIME_VERSION || !Array.isArray(value.rule) || value.rule.length === 0) {
+    throw new Error(`${scopeLabel} protocol must contain version = ${PRIME_VERSION} and one or more [[rule]] entries.`);
   }
 
   const rules = value.rule.map((rule, index) => parseRule(rule, index, scopeLabel));
-  return { version: 1, rule: rules };
+  return { version: PRIME_VERSION, rule: rules };
 }
 
 function parseRule(value: unknown, index: number, scopeLabel: string): PrimeRuleV1 {
@@ -154,13 +155,13 @@ async function runCommandSource(sourcePath: string, sourceRoot: string, scopeLab
 
 function parseCommandSource(text: string, sourceName: string, scopeLabel: string): CommandSourceV1 {
   const value = parseToml(text, `${scopeLabel} command source "${sourceName}"`);
-  if (!isRecord(value) || value.version !== 1 || !Array.isArray(value.argv) || value.argv.length === 0 || !value.argv.every((part) => typeof part === "string")) {
-    throw new Error(`${scopeLabel} command source "${sourceName}" must contain version = 1 and a non-empty argv string array.`);
+  if (!isRecord(value) || value.version !== PRIME_VERSION || !Array.isArray(value.argv) || value.argv.length === 0 || !value.argv.every((part) => typeof part === "string")) {
+    throw new Error(`${scopeLabel} command source "${sourceName}" must contain version = ${PRIME_VERSION} and a non-empty argv string array.`);
   }
   if (value.cwd !== undefined && (typeof value.cwd !== "string" || value.cwd.length === 0)) {
     throw new Error(`${scopeLabel} command source "${sourceName}" has an invalid cwd.`);
   }
-  return { version: 1, argv: value.argv as [string, ...string[]], ...(value.cwd === undefined ? {} : { cwd: value.cwd }) };
+  return { version: PRIME_VERSION, argv: value.argv as [string, ...string[]], ...(value.cwd === undefined ? {} : { cwd: value.cwd }) };
 }
 
 async function commandCwd(cwd: string | undefined, sourceRoot: string, sourceName: string, scopeLabel: string): Promise<string> {

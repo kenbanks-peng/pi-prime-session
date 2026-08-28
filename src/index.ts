@@ -28,7 +28,11 @@ export default function primeExtension(
       });
     } catch (error) {
       if (error instanceof CommandSourceError) {
-        ctx.ui.notify(`${error.sourceName} had an error.`, "error");
+        if (error.exitCode !== undefined) {
+          ctx.ui.notify(`${error.sourceName} returned error code ${error.exitCode}.`);
+        } else {
+          ctx.ui.notify(`${error.sourceName} had an error.`, "error");
+        }
         return;
       }
       throw error;

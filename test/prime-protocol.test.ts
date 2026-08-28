@@ -136,13 +136,13 @@ describe("Prime source action protocol", () => {
       },
       registerCommand: () => {},
     } as never, () => primes);
-    const notifications: Array<{ message: string; level: string }> = [];
+    const notifications: Array<{ message: string; level?: string }> = [];
 
     await expect(sessionStart?.({}, {
       cwd: join(primes.directories.projectDirectory, "..", ".."),
-      ui: { notify: (message: string, level: string) => notifications.push({ message, level }) },
+      ui: { notify: (message: string, level?: string) => notifications.push({ message, level }) },
     })).resolves.toBeUndefined();
-    expect(notifications).toEqual([{ message: "bad.command.toml had an error.", level: "error" }]);
+    expect(notifications).toEqual([{ message: "bad.command.toml returned error code 7.", level: undefined }]);
   });
 
   it("reports command timeout, output limit, malformed source, and escaping cwd", async () => {

@@ -10,7 +10,13 @@ export const PRIME_VERSION = 1;
 export type PrimeAction = "memory" | "command";
 
 export class CommandSourceError extends Error {
-  constructor(readonly sourceName: string, message: string) {
+  constructor(readonly sourceName: string, message: string, readonly exitCode?: number) {
+    super(message);
+  }
+}
+
+class CommandExitError extends Error {
+  constructor(readonly exitCode: number, message: string) {
     super(message);
   }
 }
@@ -164,7 +170,11 @@ async function runCommandSource(sourcePath: string, projectRoot: string, scopeLa
     }
   } catch (error) {
     if (error instanceof CommandSourceError) throw error;
-    throw new CommandSourceError(sourceName, errorMessage(error));
+    throw new CommandSourceError(
+      sourceName,
+      errorMessage(error),
+      error instanceof CommandExitError ? error.exitCode : undefined,
+    );
   }
 }
 
@@ -236,7 +246,12 @@ async function execute(argv: [string, ...string[]], cwd: string, sourceName: str
     child.on("close", (code, signal) => {
       if (settled) return;
       if (code !== 0) {
-        fail(`exited with status ${code ?? "none"}${signal ? ` (signal ${signal})` : ""}.`);
+        const message = `exited with status ${code ?? "none"}${signal ? ` (signal ${signal})` : ""}.`;
+        if (typeof code === "number") {
+          finish(() => reject(new CommandExitError(code, `${scopeLabel} command source "${sourceName}": ${message}`)));
+        } else {
+          fail(message);
+        }
         return;
       }
       finish(() => resolveOutput(Buffer.concat(chunks)));

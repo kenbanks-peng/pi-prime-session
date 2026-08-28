@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { installDefaultProtocol, loadProtocol, resolveProtocolMemories } from "./prime-protocol.js";
+import type { PrimeSessionEntry } from "./prime-protocol.js";
 
 export type PrimeScope = "global" | "project";
 export type PrimeSourceType = "memory" | "command";
@@ -100,11 +101,11 @@ export class PrimeRepository {
     const projectRoot = dirname(dirname(projectDirectory));
     const global = await resolveProtocolMemories(globalDirectory, "Global", globalProtocol, projectRoot);
     const project = await resolveProtocolMemories(projectDirectory, "Project", projectProtocol ?? globalProtocol, projectRoot);
-    const memories = [...global, ...project];
+    const entries = [...global, ...project];
 
-    return memories.length === 0
+    return entries.length === 0
       ? ""
-      : `<prime_memories version="1">\n${memories.map((memory) => `<memory>${escapeXml(memory)}</memory>`).join("\n")}\n</prime_memories>`;
+      : `<prime_session version="1">\n${entries.map(formatSessionEntry).join("\n")}\n</prime_session>`;
   }
 
   private directoryFor(scope: PrimeScope): string {
@@ -121,6 +122,11 @@ export class PrimeRepository {
       throw new Error(`Invalid Prime ID "${id}". Use letters, digits, hyphens, or underscores.`);
     }
   }
+}
+
+function formatSessionEntry(entry: PrimeSessionEntry): string {
+  if (entry.type === "memory") return `<memory>${escapeXml(entry.content)}</memory>`;
+  return `<command>\n<run>${escapeXml(entry.argv.join(" "))}</run>\n<output>${escapeXml(entry.output)}</output>\n</command>`;
 }
 
 function escapeXml(value: string): string {

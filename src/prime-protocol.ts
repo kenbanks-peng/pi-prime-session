@@ -9,6 +9,10 @@ export const PRIME_VERSION = 1;
 
 export type PrimeAction = "memory" | "command";
 
+export type PrimeSessionEntry =
+  | { type: "memory"; content: string }
+  | { type: "command"; argv: [string, ...string[]]; output: string };
+
 export const DEFAULT_PROTOCOL = `version = ${PRIME_VERSION}
 
 [[rule]]
@@ -57,23 +61,23 @@ export async function loadProtocol(sourceRoot: string, scopeLabel: string): Prom
   }
 }
 
-export async function resolveProtocolMemories(sourceRoot: string, scopeLabel: string, protocol: PrimeProtocolV1, projectRoot: string): Promise<string[]> {
+export async function resolveProtocolMemories(sourceRoot: string, scopeLabel: string, protocol: PrimeProtocolV1, projectRoot: string): Promise<PrimeSessionEntry[]> {
   const entries = await listDirectFiles(sourceRoot, scopeLabel);
   const selected = selectFiles(protocol, entries, scopeLabel);
-  const memories: string[] = [];
+  const sessionEntries: PrimeSessionEntry[] = [];
 
   for (const { rule, filenames } of selected) {
     for (const filename of filenames) {
       const sourcePath = resolve(sourceRoot, filename);
       if (rule.action === "memory") {
-        memories.push(await readUtf8(sourcePath, `${scopeLabel} source "${filename}"`));
+        sessionEntries.push({ type: "memory", content: await readUtf8(sourcePath, `${scopeLabel} source "${filename}"`) });
       } else {
-        memories.push(await runCommandSource(sourcePath, projectRoot, scopeLabel));
+        sessionEntries.push(await runCommandSource(sourcePath, projectRoot, scopeLabel));
       }
     }
   }
 
-  return memories;
+  return sessionEntries;
 }
 
 function parseProtocol(text: string, scopeLabel: string): PrimeProtocolV1 {
@@ -141,13 +145,13 @@ function matchesGlob(filename: string, glob: string): boolean {
   return new RegExp(expression).test(filename);
 }
 
-async function runCommandSource(sourcePath: string, projectRoot: string, scopeLabel: string): Promise<string> {
+async function runCommandSource(sourcePath: string, projectRoot: string, scopeLabel: string): Promise<Extract<PrimeSessionEntry, { type: "command" }>> {
   const sourceName = basename(sourcePath);
   const source = parseCommandSource(await readUtf8(sourcePath, `${scopeLabel} command source "${sourceName}"`), sourceName, scopeLabel);
   const cwd = await commandCwd(source.cwd, projectRoot, sourceName, scopeLabel);
   const output = await execute(source.argv, cwd, sourceName, scopeLabel);
   try {
-    return utf8.decode(output);
+    return { type: "command", argv: source.argv, output: utf8.decode(output) };
   } catch {
     throw new Error(`${scopeLabel} command source "${sourceName}" produced invalid UTF-8 stdout.`);
   }

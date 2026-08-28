@@ -93,10 +93,14 @@ The extension gives each added source an ID such as `prime-5fdd69c9`. Memory sou
 Pi resolves Global sources before Project sources. It adds this hidden message before conversation context:
 
 ```xml
-<prime_memories version="1">
+<prime_session version="1">
 <memory>Global guidance</memory>
-<memory>Project guidance</memory>
-</prime_memories>
+<command>
+<run>git status --short</run>
+<output> M src/index.ts
+?? test/new.test.ts</output>
+</command>
+</prime_session>
 ```
 
-Pi XML-escapes memory source text and command output. Source data cannot add XML markup.
+The `run` value shows the direct command invocation. Command output is inserted as text, with its original line breaks. Pi XML-escapes memory source text, command arguments, and command output. Source data cannot add XML markup.

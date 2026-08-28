@@ -17,7 +17,7 @@ export default function primeExtension(pi: ExtensionAPI): void {
     if (!primes) return;
 
     pi.sendMessage({
-      customType: "prime_memories",
+      customType: "prime_session",
       content: primes,
       display: false,
     });
@@ -25,7 +25,7 @@ export default function primeExtension(pi: ExtensionAPI): void {
 
   pi.on("context", (event) => {
     const primeMessages = event.messages.filter(
-      (message) => message.role === "custom" && message.customType === "prime_memories",
+      (message) => message.role === "custom" && message.customType === "prime_session",
     );
     if (primeMessages.length === 0) return;
 
@@ -33,7 +33,7 @@ export default function primeExtension(pi: ExtensionAPI): void {
       messages: [
         ...primeMessages,
         ...event.messages.filter(
-          (message) => message.role !== "custom" || message.customType !== "prime_memories",
+          (message) => message.role !== "custom" || message.customType !== "prime_session",
         ),
       ],
     };

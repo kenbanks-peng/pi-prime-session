@@ -41,12 +41,12 @@ describe("Prime extension", () => {
     const result = await contextHandler!({
       messages: [
         { role: "user", content: "First request" },
-        { role: "custom", customType: "prime_memories", content: "<prime_memories />" },
+        { role: "custom", customType: "prime_session", content: "<prime_session />" },
         { role: "assistant", content: "First response" },
       ],
     }) as { messages: Array<Record<string, unknown>> };
 
-    expect(result.messages.map((message) => message.content)).toEqual(["<prime_memories />", "First request", "First response"]);
+    expect(result.messages.map((message) => message.content)).toEqual(["<prime_session />", "First request", "First response"]);
   });
 });
 
@@ -72,7 +72,7 @@ describe("PrimeRepository", () => {
     await writeFile(join(primes.directories.globalDirectory, "global.md"), "Global");
     await writeFile(join(primes.directories.projectDirectory, "project.md"), "Project");
 
-    await expect(primes.compose()).resolves.toBe('<prime_memories version="1">\n<memory>Global</memory>\n<memory>Project</memory>\n</prime_memories>');
+    await expect(primes.compose()).resolves.toBe('<prime_session version="1">\n<memory>Global</memory>\n<memory>Project</memory>\n</prime_session>');
     await expect(Bun.file(join(primes.directories.globalDirectory, "prime.protocol.toml")).text()).resolves.toContain('action = "memory"');
   });
 

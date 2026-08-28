@@ -1,13 +1,16 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { PrimeRepository } from "../src/prime-repository.js";
 import { COMMAND_OUTPUT_LIMIT_BYTES, COMMAND_TIMEOUT_MS } from "../src/prime-protocol.js";
 
 const temporaryDirectories: string[] = [];
 const markdownProtocol = 'version = 1\n\n[[rule]]\nglob = "*.md"\naction = "memory"\n';
 const commandProtocol = 'version = 1\n\n[[rule]]\nglob = "*.command.toml"\naction = "command"\n';
+const execFileAsync = promisify(execFile);
 
 afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { force: true, recursive: true })));
@@ -82,6 +85,21 @@ describe("Prime source action protocol", () => {
     await expect(primes.compose()).resolves.toContain("literal; $HOME &lt;tag&gt;&amp;");
   });
 
+  it("runs Global command sources from the current project root", async () => {
+    const primes = await createFixture();
+    const projectRoot = join(primes.directories.projectDirectory, "..", "..");
+    await writeFile(join(projectRoot, "tracked.md"), "tracked");
+    await execFileAsync("git", ["init", "--quiet"], { cwd: projectRoot });
+    await execFileAsync("git", ["add", "tracked.md"], { cwd: projectRoot });
+    await protocol(primes.directories.globalDirectory, commandProtocol);
+    await writeFile(
+      join(primes.directories.globalDirectory, "tracked.command.toml"),
+      'version = 1\nargv = ["git", "ls-files"]\n',
+    );
+
+    await expect(primes.compose()).resolves.toContain("tracked.md");
+  });
+
   it("rejects failed commands without returning partial scope output", async () => {
     const primes = await createFixture();
     await protocol(primes.directories.projectDirectory, `${markdownProtocol}\n[[rule]]\nglob = "*.command.toml"\naction = "command"\n`);
@@ -106,7 +124,7 @@ describe("Prime source action protocol", () => {
     await expect(primes.compose()).rejects.toThrow("non-empty argv string array");
 
     await command(`version = 1\nargv = [${JSON.stringify(process.execPath)}, "-e", ""]\ncwd = "../outside"\n`);
-    await expect(primes.compose()).rejects.toThrow("cwd must not escape the source root");
+    await expect(primes.compose()).rejects.toThrow("cwd must not escape the current project root");
   });
 
   it("rejects invalid protocol TOML, unsupported globs, actions, and overlapping matches", async () => {

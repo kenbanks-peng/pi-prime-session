@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { installDefaultProtocol, loadProtocol, resolveProtocolMemories } from "./prime-protocol.js";
 
 export type PrimeScope = "global" | "project";
@@ -97,8 +97,9 @@ export class PrimeRepository {
 
     const projectDirectory = this.directoryFor("project");
     const projectProtocol = await loadProtocol(projectDirectory, "Project");
-    const global = await resolveProtocolMemories(globalDirectory, "Global", globalProtocol);
-    const project = await resolveProtocolMemories(projectDirectory, "Project", projectProtocol ?? globalProtocol);
+    const projectRoot = dirname(dirname(projectDirectory));
+    const global = await resolveProtocolMemories(globalDirectory, "Global", globalProtocol, projectRoot);
+    const project = await resolveProtocolMemories(projectDirectory, "Project", projectProtocol ?? globalProtocol, projectRoot);
     const memories = [...global, ...project];
 
     return memories.length === 0

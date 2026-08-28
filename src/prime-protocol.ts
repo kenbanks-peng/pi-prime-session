@@ -57,7 +57,7 @@ export async function loadProtocol(sourceRoot: string, scopeLabel: string): Prom
   }
 }
 
-export async function resolveProtocolMemories(sourceRoot: string, scopeLabel: string, protocol: PrimeProtocolV1): Promise<string[]> {
+export async function resolveProtocolMemories(sourceRoot: string, scopeLabel: string, protocol: PrimeProtocolV1, projectRoot: string): Promise<string[]> {
   const entries = await listDirectFiles(sourceRoot, scopeLabel);
   const selected = selectFiles(protocol, entries, scopeLabel);
   const memories: string[] = [];
@@ -68,7 +68,7 @@ export async function resolveProtocolMemories(sourceRoot: string, scopeLabel: st
       if (rule.action === "memory") {
         memories.push(await readUtf8(sourcePath, `${scopeLabel} source "${filename}"`));
       } else {
-        memories.push(await runCommandSource(sourcePath, sourceRoot, scopeLabel));
+        memories.push(await runCommandSource(sourcePath, projectRoot, scopeLabel));
       }
     }
   }
@@ -141,10 +141,10 @@ function matchesGlob(filename: string, glob: string): boolean {
   return new RegExp(expression).test(filename);
 }
 
-async function runCommandSource(sourcePath: string, sourceRoot: string, scopeLabel: string): Promise<string> {
+async function runCommandSource(sourcePath: string, projectRoot: string, scopeLabel: string): Promise<string> {
   const sourceName = basename(sourcePath);
   const source = parseCommandSource(await readUtf8(sourcePath, `${scopeLabel} command source "${sourceName}"`), sourceName, scopeLabel);
-  const cwd = await commandCwd(source.cwd, sourceRoot, sourceName, scopeLabel);
+  const cwd = await commandCwd(source.cwd, projectRoot, sourceName, scopeLabel);
   const output = await execute(source.argv, cwd, sourceName, scopeLabel);
   try {
     return utf8.decode(output);
@@ -164,19 +164,19 @@ function parseCommandSource(text: string, sourceName: string, scopeLabel: string
   return { version: PRIME_VERSION, argv: value.argv as [string, ...string[]], ...(value.cwd === undefined ? {} : { cwd: value.cwd }) };
 }
 
-async function commandCwd(cwd: string | undefined, sourceRoot: string, sourceName: string, scopeLabel: string): Promise<string> {
+async function commandCwd(cwd: string | undefined, projectRoot: string, sourceName: string, scopeLabel: string): Promise<string> {
   const requested = cwd ?? ".";
   if (isAbsolute(requested)) {
-    throw new Error(`${scopeLabel} command source "${sourceName}" cwd must be relative beneath the source root.`);
+    throw new Error(`${scopeLabel} command source "${sourceName}" cwd must be relative beneath the current project root.`);
   }
-  const candidate = resolve(sourceRoot, requested);
-  if (!isContained(sourceRoot, candidate)) {
-    throw new Error(`${scopeLabel} command source "${sourceName}" cwd must not escape the source root.`);
+  const candidate = resolve(projectRoot, requested);
+  if (!isContained(projectRoot, candidate)) {
+    throw new Error(`${scopeLabel} command source "${sourceName}" cwd must not escape the current project root.`);
   }
   try {
-    const [root, resolvedCwd] = await Promise.all([realpath(sourceRoot), realpath(candidate)]);
+    const [root, resolvedCwd] = await Promise.all([realpath(projectRoot), realpath(candidate)]);
     if (!isContained(root, resolvedCwd)) {
-      throw new Error(`${scopeLabel} command source "${sourceName}" cwd must not escape the source root.`);
+      throw new Error(`${scopeLabel} command source "${sourceName}" cwd must not escape the current project root.`);
     }
     return resolvedCwd;
   } catch (error) {

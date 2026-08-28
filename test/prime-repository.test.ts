@@ -23,16 +23,21 @@ async function createFixture() {
 }
 
 describe("Prime extension", () => {
-  it("places Prime messages before the conversation context", async () => {
+  it("composes Primes once when the session starts", async () => {
     let contextHandler: ((event: { messages: Array<Record<string, unknown>> }) => unknown) | undefined;
+    const events: string[] = [];
     const pi = {
       on(event: string, handler: (event: { messages: Array<Record<string, unknown>> }) => unknown) {
+        events.push(event);
         if (event === "context") contextHandler = handler;
       },
+      sendMessage() {},
       registerCommand() {},
     };
     primeExtension(pi as never);
 
+    expect(events).toContain("session_start");
+    expect(events).not.toContain("before_agent_start");
     const result = await contextHandler!({
       messages: [
         { role: "user", content: "First request" },

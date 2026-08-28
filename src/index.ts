@@ -12,17 +12,15 @@ export function createPrimeRepository(cwd: string, home = homedir()): PrimeRepos
 }
 
 export default function primeExtension(pi: ExtensionAPI): void {
-  pi.on("before_agent_start", async (event, ctx) => {
+  pi.on("session_start", async (_event, ctx) => {
     const primes = await createPrimeRepository(ctx.cwd).compose();
     if (!primes) return;
 
-    return {
-      message: {
-        customType: "prime_memories",
-        content: primes,
-        display: false,
-      },
-    };
+    pi.sendMessage({
+      customType: "prime_memories",
+      content: primes,
+      display: false,
+    });
   });
 
   pi.on("context", (event) => {

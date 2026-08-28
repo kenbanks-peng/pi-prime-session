@@ -19,7 +19,7 @@ A Prime stored under `~/.agents/share/prime`, available to every Pi project.
 A Prime stored under `.agents/prime` at the current project root, available only in that project.
 
 **Prime composition**:
-The automatic injection of Global Primes followed by Project Primes for agent context. The extension reads the current files when context is prepared; no locking or session snapshot is needed.
+The automatic injection of Global Primes followed by Project Primes for agent context. The extension reads and snapshots the current files once when a session starts; the snapshot is used for the rest of that session.
 
 **Prime ID**:
 A required URL-safe identifier that names a Prime and maps to its individual Markdown filename. It is unique only within a scope.

@@ -72,7 +72,7 @@ describe("PrimeRepository", () => {
     await writeFile(join(primes.directories.globalDirectory, "global.md"), "Global");
     await writeFile(join(primes.directories.projectDirectory, "project.md"), "Project");
 
-    await expect(primes.compose()).resolves.toBe('<prime_session version="1">\n<memory>Global</memory>\n<memory>Project</memory>\n</prime_session>');
+    await expect(primes.compose()).resolves.toBe('<prime_session version="1">\n  <memory>Global</memory>\n  <memory>Project</memory>\n</prime_session>');
     await expect(Bun.file(join(primes.directories.globalDirectory, "prime.protocol.toml")).text()).resolves.toContain('action = "memory"');
   });
 

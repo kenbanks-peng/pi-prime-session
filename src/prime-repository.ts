@@ -125,8 +125,8 @@ export class PrimeRepository {
 }
 
 function formatSessionEntry(entry: PrimeSessionEntry): string {
-  if (entry.type === "memory") return `<memory>${escapeXml(entry.content)}</memory>`;
-  return `<command>\n<run>${escapeXml(entry.argv.join(" "))}</run>\n<output>${escapeXml(entry.output)}</output>\n</command>`;
+  if (entry.type === "memory") return `  <memory>${escapeXml(entry.content)}</memory>`;
+  return `  <command>\n    <run>${escapeXml(entry.argv.join(" "))}</run>\n    <output>${escapeXml(entry.output)}</output>\n  </command>`;
 }
 
 function escapeXml(value: string): string {

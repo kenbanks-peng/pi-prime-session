@@ -61,7 +61,7 @@ describe("Prime source action protocol", () => {
     await writeFile(join(primes.directories.projectDirectory, "nested", "hidden.md"), "Hidden");
 
     await expect(primes.compose()).resolves.toBe(
-      '<prime_session version="1">\n<memory>&lt;tag&gt;&amp;&lt;/memory&gt;</memory>\n<memory>Z</memory>\n</prime_session>',
+      '<prime_session version="1">\n  <memory>&lt;tag&gt;&amp;&lt;/memory&gt;</memory>\n  <memory>Z</memory>\n</prime_session>',
     );
   });
 
@@ -83,7 +83,7 @@ describe("Prime source action protocol", () => {
     );
 
     await expect(primes.compose()).resolves.toBe(
-      '<prime_session version="1">\n<command>\n<run>' + process.execPath.replace(/&/g, "&amp;") + ' -e process.stdout.write(process.argv[1]) literal; $HOME &lt;tag&gt;&amp;</run>\n<output>literal; $HOME &lt;tag&gt;&amp;</output>\n</command>\n</prime_session>',
+      '<prime_session version="1">\n  <command>\n    <run>' + process.execPath.replace(/&/g, "&amp;") + ' -e process.stdout.write(process.argv[1]) literal; $HOME &lt;tag&gt;&amp;</run>\n    <output>literal; $HOME &lt;tag&gt;&amp;</output>\n  </command>\n</prime_session>',
     );
   });
 
@@ -95,7 +95,7 @@ describe("Prime source action protocol", () => {
       `version = 1\nargv = [${JSON.stringify(process.execPath)}, "-e", "process.stdout.write('first\\\\nsecond')"]\n`,
     );
 
-    await expect(primes.compose()).resolves.toContain(`<output>first
+    await expect(primes.compose()).resolves.toContain(`    <output>first
 second</output>`);
   });
 
@@ -162,6 +162,6 @@ second</output>`);
     await Promise.all([protocol(primes.directories.globalDirectory, markdownProtocol), protocol(primes.directories.projectDirectory, markdownProtocol)]);
     await Promise.all([writeFile(join(primes.directories.globalDirectory, "a.md"), "Global"), writeFile(join(primes.directories.projectDirectory, "a.md"), "Project")]);
 
-    await expect(primes.compose()).resolves.toBe('<prime_session version="1">\n<memory>Global</memory>\n<memory>Project</memory>\n</prime_session>');
+    await expect(primes.compose()).resolves.toBe('<prime_session version="1">\n  <memory>Global</memory>\n  <memory>Project</memory>\n</prime_session>');
   });
 });

@@ -125,8 +125,12 @@ export class PrimeRepository {
 }
 
 function formatSessionEntry(entry: PrimeSessionEntry): string {
-  if (entry.type === "memory") return `  <memory>${escapeXml(entry.content)}</memory>`;
-  return `  <command>\n    <run>${escapeXml(entry.argv.join(" "))}</run>\n    <output>${escapeXml(entry.output)}</output>\n  </command>`;
+  if (entry.type === "memory") return `  <memory>${formatXmlText(entry.content, "  ")}</memory>`;
+  return `  <command>\n    <run>${formatXmlText(entry.argv.join(" "), "    ")}</run>\n    <output>${formatXmlText(entry.output, "    ")}</output>\n  </command>`;
+}
+
+function formatXmlText(value: string, continuationIndent: string): string {
+  return escapeXml(value).replace(/\r?\n/g, (lineBreak) => `${lineBreak}${continuationIndent}`);
 }
 
 function escapeXml(value: string): string {

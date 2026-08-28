@@ -87,7 +87,7 @@ describe("Prime source action protocol", () => {
     );
   });
 
-  it("preserves command-output line breaks as XML text", async () => {
+  it("indents every line of command output", async () => {
     const primes = await createFixture();
     await protocol(primes.directories.projectDirectory, commandProtocol);
     await writeFile(
@@ -96,7 +96,7 @@ describe("Prime source action protocol", () => {
     );
 
     await expect(primes.compose()).resolves.toContain(`    <output>first
-second</output>`);
+    second</output>`);
   });
 
   it("runs Global command sources from the current project root", async () => {

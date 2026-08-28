@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import primeExtension from "../src/index.js";
 import { PrimeRepository } from "../src/prime-repository.js";
 import { COMMAND_OUTPUT_LIMIT_BYTES, COMMAND_TIMEOUT_MS } from "../src/prime-protocol.js";
 
@@ -121,6 +122,27 @@ describe("Prime source action protocol", () => {
     await writeFile(join(primes.directories.projectDirectory, "bad.command.toml"), `version = 1\nargv = [${JSON.stringify(process.execPath)}, "-e", "process.exit(7)"]\n`);
 
     await expect(primes.compose()).rejects.toThrow("exited with status 7");
+  });
+
+  it("reports a failed command source without rejecting the session-start handler", async () => {
+    const primes = await createFixture();
+    await protocol(primes.directories.projectDirectory, commandProtocol);
+    await writeFile(join(primes.directories.projectDirectory, "bad.command.toml"), `version = 1\nargv = [${JSON.stringify(process.execPath)}, "-e", "process.exit(7)"]\n`);
+
+    let sessionStart: ((event: unknown, context: unknown) => Promise<void>) | undefined;
+    primeExtension({
+      on: (event: string, handler: unknown) => {
+        if (event === "session_start") sessionStart = handler as typeof sessionStart;
+      },
+      registerCommand: () => {},
+    } as never, () => primes);
+    const notifications: Array<{ message: string; level: string }> = [];
+
+    await expect(sessionStart?.({}, {
+      cwd: join(primes.directories.projectDirectory, "..", ".."),
+      ui: { notify: (message: string, level: string) => notifications.push({ message, level }) },
+    })).resolves.toBeUndefined();
+    expect(notifications).toEqual([{ message: "bad.command.toml had an error.", level: "error" }]);
   });
 
   it("reports command timeout, output limit, malformed source, and escaping cwd", async () => {

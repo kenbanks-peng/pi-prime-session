@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { runPrimeCommand } from "./prime-command.js";
+import { CommandSourceError } from "./prime-protocol.js";
 import { PrimeRepository } from "./prime-repository.js";
 
 export function createPrimeRepository(cwd: string, home = homedir()): PrimeRepository {
@@ -11,16 +12,27 @@ export function createPrimeRepository(cwd: string, home = homedir()): PrimeRepos
   });
 }
 
-export default function primeExtension(pi: ExtensionAPI): void {
+export default function primeExtension(
+  pi: ExtensionAPI,
+  repositoryFor: (cwd: string) => PrimeRepository = createPrimeRepository,
+): void {
   pi.on("session_start", async (_event, ctx) => {
-    const primes = await createPrimeRepository(ctx.cwd).compose();
-    if (!primes) return;
+    try {
+      const primes = await repositoryFor(ctx.cwd).compose();
+      if (!primes) return;
 
-    pi.sendMessage({
-      customType: "prime_session",
-      content: primes,
-      display: false,
-    });
+      pi.sendMessage({
+        customType: "prime_session",
+        content: primes,
+        display: false,
+      });
+    } catch (error) {
+      if (error instanceof CommandSourceError) {
+        ctx.ui.notify(`${error.sourceName} had an error.`, "error");
+        return;
+      }
+      throw error;
+    }
   });
 
   pi.on("context", (event) => {

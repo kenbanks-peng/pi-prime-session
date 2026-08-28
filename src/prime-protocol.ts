@@ -9,6 +9,12 @@ export const PRIME_VERSION = 1;
 
 export type PrimeAction = "memory" | "command";
 
+export class CommandSourceError extends Error {
+  constructor(readonly sourceName: string, message: string) {
+    super(message);
+  }
+}
+
 export type PrimeSessionEntry =
   | { type: "memory"; content: string }
   | { type: "command"; argv: [string, ...string[]]; output: string };
@@ -147,13 +153,18 @@ function matchesGlob(filename: string, glob: string): boolean {
 
 async function runCommandSource(sourcePath: string, projectRoot: string, scopeLabel: string): Promise<Extract<PrimeSessionEntry, { type: "command" }>> {
   const sourceName = basename(sourcePath);
-  const source = parseCommandSource(await readUtf8(sourcePath, `${scopeLabel} command source "${sourceName}"`), sourceName, scopeLabel);
-  const cwd = await commandCwd(source.cwd, projectRoot, sourceName, scopeLabel);
-  const output = await execute(source.argv, cwd, sourceName, scopeLabel);
   try {
-    return { type: "command", argv: source.argv, output: utf8.decode(output) };
-  } catch {
-    throw new Error(`${scopeLabel} command source "${sourceName}" produced invalid UTF-8 stdout.`);
+    const source = parseCommandSource(await readUtf8(sourcePath, `${scopeLabel} command source "${sourceName}"`), sourceName, scopeLabel);
+    const cwd = await commandCwd(source.cwd, projectRoot, sourceName, scopeLabel);
+    const output = await execute(source.argv, cwd, sourceName, scopeLabel);
+    try {
+      return { type: "command", argv: source.argv, output: utf8.decode(output) };
+    } catch {
+      throw new Error(`${scopeLabel} command source "${sourceName}" produced invalid UTF-8 stdout.`);
+    }
+  } catch (error) {
+    if (error instanceof CommandSourceError) throw error;
+    throw new CommandSourceError(sourceName, errorMessage(error));
   }
 }
 

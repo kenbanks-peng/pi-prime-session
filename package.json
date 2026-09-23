@@ -1,6 +1,6 @@
 {
   "name": "@npm-ken/pi-prime-session",
-  "version": "2.3.3",
+  "version": "2.4.0",
   "description": "User-managed priming of Pi agent sessions with memories and commands",
   "type": "module",
   "keywords": ["pi-package", "pi-extension"],
@@ -14,10 +14,10 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "^0.84.1"
+    "@earendil-works/pi-coding-agent": "*"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "^0.84.1",
+    "@earendil-works/pi-coding-agent": "latest",
     "@types/bun": "latest",
     "typescript": "^5.9.3"
   },

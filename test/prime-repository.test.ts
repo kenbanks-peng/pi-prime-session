@@ -58,18 +58,18 @@ describe("Prime extension", () => {
     expect([...extension.handlers.keys()]).toEqual(["session_start", "before_agent_start"]);
     await extension.startSession();
     const first = extension.beforeAgentStart({ unrelated: "Keep this section" });
-    expect(first.prime_context).toContain("<prime_session version=\"1\">");
-    expect(first.prime_context).toContain("Original guidance");
+    expect(first.prime).toBe("  <memory>Original guidance</memory>");
+    expect(first.prime).toContain("Original guidance");
     expect(first.unrelated).toBe("Keep this section");
 
     await primes.edit("global", { id, type: "memory" }, "Changed guidance");
     const second = extension.beforeAgentStart();
-    expect(second.prime_context).toBe(first.prime_context);
+    expect(second.prime).toBe(first.prime);
     expect(compose).toHaveBeenCalledTimes(1);
     expect(extension.sendMessage).not.toHaveBeenCalled();
 
     await extension.startSession();
-    expect(extension.beforeAgentStart().prime_context).toContain("Changed guidance");
+    expect(extension.beforeAgentStart().prime).toContain("Changed guidance");
     expect(compose).toHaveBeenCalledTimes(2);
   });
 
@@ -87,7 +87,7 @@ describe("Prime extension", () => {
     const extension = createExtensionHarness(primes);
     await extension.startSession();
     const sections = extension.beforeAgentStart({ unrelated: "Keep" });
-    expect(sections.prime_context).toContain("Guidance");
+    expect(sections.prime).toContain("Guidance");
 
     await primes.delete("global", { id, type: "memory" });
     await extension.startSession();
@@ -152,7 +152,7 @@ describe("PrimeRepository", () => {
     await writeFile(join(primes.directories.globalDirectory, "global.md"), "Global");
     await writeFile(join(primes.directories.projectDirectory, "project.md"), "Project");
 
-    await expect(primes.compose()).resolves.toBe('<prime_session version="1">\n  <memory>Global</memory>\n  <memory>Project</memory>\n</prime_session>');
+    await expect(primes.compose()).resolves.toBe('  <memory>Global</memory>\n  <memory>Project</memory>');
     await expect(Bun.file(join(primes.directories.globalDirectory, "prime.protocol.toml")).text()).resolves.toContain('action = "memory"');
   });
 

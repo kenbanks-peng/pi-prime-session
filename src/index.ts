@@ -37,9 +37,9 @@ export default function primeExtension(
 
   pi.on("before_agent_start", (event) => {
     if (primeSnapshot) {
-      event.systemPromptOptions.sections.prime_context = primeSnapshot;
+      event.systemPromptOptions.sections.prime = primeSnapshot;
     } else {
-      delete event.systemPromptOptions.sections.prime_context;
+      delete event.systemPromptOptions.sections.prime;
     }
   });
 

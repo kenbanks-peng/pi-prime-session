@@ -105,7 +105,7 @@ export class PrimeRepository {
 
     return entries.length === 0
       ? ""
-      : `<prime_session version="1">\n${entries.map(formatSessionEntry).join("\n")}\n</prime_session>`;
+      : entries.map(formatSessionEntry).join("\n");
   }
 
   private directoryFor(scope: PrimeScope): string {

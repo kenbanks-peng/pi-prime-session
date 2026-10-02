@@ -92,19 +92,17 @@ The extension gives each added source an ID such as `prime-5fdd69c9`. Memory sou
 
 Pi resolves Global sources before Project sources. At session start, it reads the sources and runs the commands once. It uses this snapshot for the rest of the session. Source changes take effect when a new session starts.
 
-Before each agent run, the extension adds the snapshot to the structured system-prompt section `prime_context`. It does not add a user message:
+Before each agent run, the extension adds the snapshot to the structured system-prompt section `prime`. It does not add a user message:
 
 ```xml
-<prime_context>
-<prime_session version="1">
+<prime>
 <memory>Global guidance</memory>
 <command>
 <run>git status --short</run>
 <output> M src/index.ts
 ?? test/new.test.ts</output>
 </command>
-</prime_session>
-</prime_context>
+</prime>
 ```
 
 Prime content is system-level context. Command output is data, not instructions.

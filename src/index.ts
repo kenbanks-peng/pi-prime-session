@@ -16,16 +16,12 @@ export default function primeExtension(
   pi: ExtensionAPI,
   repositoryFor: (cwd: string) => PrimeRepository = createPrimeRepository,
 ): void {
-  pi.on("session_start", async (_event, ctx) => {
-    try {
-      const primes = await repositoryFor(ctx.cwd).compose();
-      if (!primes) return;
+  let primeSnapshot = "";
 
-      pi.sendMessage({
-        customType: "prime_session",
-        content: primes,
-        display: false,
-      });
+  pi.on("session_start", async (_event, ctx) => {
+    primeSnapshot = "";
+    try {
+      primeSnapshot = await repositoryFor(ctx.cwd).compose();
     } catch (error) {
       if (error instanceof CommandSourceError) {
         if (error.exitCode !== undefined) {
@@ -39,20 +35,12 @@ export default function primeExtension(
     }
   });
 
-  pi.on("context", (event) => {
-    const primeMessages = event.messages.filter(
-      (message) => message.role === "custom" && message.customType === "prime_session",
-    );
-    if (primeMessages.length === 0) return;
-
-    return {
-      messages: [
-        ...primeMessages,
-        ...event.messages.filter(
-          (message) => message.role !== "custom" || message.customType !== "prime_session",
-        ),
-      ],
-    };
+  pi.on("before_agent_start", (event) => {
+    if (primeSnapshot) {
+      event.systemPromptOptions.sections.prime_context = primeSnapshot;
+    } else {
+      delete event.systemPromptOptions.sections.prime_context;
+    }
   });
 
   pi.registerCommand("prime", {

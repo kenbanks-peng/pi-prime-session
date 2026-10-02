@@ -90,9 +90,12 @@ The extension gives each added source an ID such as `prime-5fdd69c9`. Memory sou
 
 ## Context format
 
-Pi resolves Global sources before Project sources. It adds this hidden message before conversation context:
+Pi resolves Global sources before Project sources. At session start, it reads the sources and runs the commands once. It uses this snapshot for the rest of the session. Source changes take effect when a new session starts.
+
+Before each agent run, the extension adds the snapshot to the structured system-prompt section `prime_context`. It does not add a user message:
 
 ```xml
+<prime_context>
 <prime_session version="1">
 <memory>Global guidance</memory>
 <command>
@@ -101,6 +104,9 @@ Pi resolves Global sources before Project sources. It adds this hidden message b
 ?? test/new.test.ts</output>
 </command>
 </prime_session>
+</prime_context>
 ```
+
+Prime content is system-level context. Command output is data, not instructions.
 
 The `run` value shows the direct command invocation. Command output is inserted as text, with its original line breaks. Pi XML-escapes memory source text, command arguments, and command output. Source data cannot add XML markup.

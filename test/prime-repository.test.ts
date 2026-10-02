@@ -1,10 +1,10 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import primeExtension, { createPrimeRepository } from "../src/index.js";
 import { runPrimeCommand } from "../src/prime-command.js";
-import { PRIME_VERSION } from "../src/prime-protocol.js";
+import { CommandSourceError, PRIME_VERSION } from "../src/prime-protocol.js";
 import { PrimeRepository } from "../src/prime-repository.js";
 
 const temporaryDirectories: string[] = [];
@@ -22,31 +22,111 @@ async function createFixture() {
   });
 }
 
+function createExtensionHarness(primes: PrimeRepository) {
+  const handlers = new Map<string, (event: never, ctx: never) => unknown>();
+  const sendMessage = mock(() => {});
+  const notify = mock((_message: string, _level?: string) => {});
+  primeExtension({
+    on(event: string, handler: (event: never, ctx: never) => unknown) {
+      handlers.set(event, handler);
+    },
+    sendMessage,
+    registerCommand() {},
+  } as never, () => primes);
+
+  return {
+    handlers,
+    sendMessage,
+    notify,
+    async startSession() {
+      await handlers.get("session_start")!({} as never, { cwd: "/project", ui: { notify } } as never);
+    },
+    beforeAgentStart(sections: Record<string, string> = {}) {
+      handlers.get("before_agent_start")!({ systemPromptOptions: { sections } } as never, {} as never);
+      return sections;
+    },
+  };
+}
+
 describe("Prime extension", () => {
-  it("composes Primes once when the session starts", async () => {
-    let contextHandler: ((event: { messages: Array<Record<string, unknown>> }) => unknown) | undefined;
-    const events: string[] = [];
-    const pi = {
-      on(event: string, handler: (event: { messages: Array<Record<string, unknown>> }) => unknown) {
-        events.push(event);
-        if (event === "context") contextHandler = handler;
-      },
-      sendMessage() {},
-      registerCommand() {},
-    };
-    primeExtension(pi as never);
+  it("adds a session snapshot to system context without sending a message", async () => {
+    const primes = await createFixture();
+    const id = await primes.create("global", "memory", "Original guidance");
+    const compose = spyOn(primes, "compose");
+    const extension = createExtensionHarness(primes);
 
-    expect(events).toContain("session_start");
-    expect(events).not.toContain("before_agent_start");
-    const result = await contextHandler!({
-      messages: [
-        { role: "user", content: "First request" },
-        { role: "custom", customType: "prime_session", content: "<prime_session />" },
-        { role: "assistant", content: "First response" },
-      ],
-    }) as { messages: Array<Record<string, unknown>> };
+    expect([...extension.handlers.keys()]).toEqual(["session_start", "before_agent_start"]);
+    await extension.startSession();
+    const first = extension.beforeAgentStart({ unrelated: "Keep this section" });
+    expect(first.prime_context).toContain("<prime_session version=\"1\">");
+    expect(first.prime_context).toContain("Original guidance");
+    expect(first.unrelated).toBe("Keep this section");
 
-    expect(result.messages.map((message) => message.content)).toEqual(["<prime_session />", "First request", "First response"]);
+    await primes.edit("global", { id, type: "memory" }, "Changed guidance");
+    const second = extension.beforeAgentStart();
+    expect(second.prime_context).toBe(first.prime_context);
+    expect(compose).toHaveBeenCalledTimes(1);
+    expect(extension.sendMessage).not.toHaveBeenCalled();
+
+    await extension.startSession();
+    expect(extension.beforeAgentStart().prime_context).toContain("Changed guidance");
+    expect(compose).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not add a section before session start or when no sources exist", async () => {
+    const extension = createExtensionHarness(await createFixture());
+    expect(extension.beforeAgentStart({ unrelated: "Keep" })).toEqual({ unrelated: "Keep" });
+    await extension.startSession();
+    expect(extension.beforeAgentStart({ unrelated: "Keep" })).toEqual({ unrelated: "Keep" });
+    expect(extension.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("clears the previous snapshot when the next session has no sources", async () => {
+    const primes = await createFixture();
+    const id = await primes.create("global", "memory", "Guidance");
+    const extension = createExtensionHarness(primes);
+    await extension.startSession();
+    const sections = extension.beforeAgentStart({ unrelated: "Keep" });
+    expect(sections.prime_context).toContain("Guidance");
+
+    await primes.delete("global", { id, type: "memory" });
+    await extension.startSession();
+    expect(extension.beforeAgentStart(sections)).toEqual({ unrelated: "Keep" });
+  });
+
+  it.each([
+    [new CommandSourceError("status.command.toml", "Failed", 2), "status.command.toml returned error code 2.", undefined],
+    [new CommandSourceError("status.command.toml", "Timed out"), "status.command.toml had an error.", "error"],
+  ])("reports command errors and clears the previous snapshot: %s", async (error, message, level) => {
+    const primes = await createFixture();
+    await primes.create("global", "memory", "Guidance");
+    const extension = createExtensionHarness(primes);
+    await extension.startSession();
+    const sections = extension.beforeAgentStart();
+
+    spyOn(primes, "compose").mockRejectedValue(error);
+    await extension.startSession();
+    expect(extension.beforeAgentStart(sections)).toEqual({});
+    if (level) {
+      expect(extension.notify).toHaveBeenCalledWith(message, level);
+    } else {
+      expect(extension.notify).toHaveBeenCalledWith(message);
+    }
+    expect(extension.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("propagates other errors without retaining the previous snapshot", async () => {
+    const primes = await createFixture();
+    await primes.create("global", "memory", "Guidance");
+    const extension = createExtensionHarness(primes);
+    await extension.startSession();
+    const sections = extension.beforeAgentStart();
+    const error = new Error("Invalid protocol");
+    spyOn(primes, "compose").mockRejectedValue(error);
+
+    await expect(extension.startSession()).rejects.toThrow(error);
+    expect(extension.beforeAgentStart(sections)).toEqual({});
+    expect(extension.notify).not.toHaveBeenCalled();
   });
 });
 
